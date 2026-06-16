@@ -33,13 +33,11 @@ body {
   border-bottom: 1px solid #222;
 }
 
-.logo {
-  height: 56px;
-  width: auto;
-  max-width: min(280px, 80vw);
-  object-fit: contain;
-  display: block;
-  margin: 0 auto;
+.title {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #4a90e2;
+  letter-spacing: 2px;
 }
 
 .content {
@@ -394,8 +392,8 @@ body {
 
 /* Responsive */
 @media (max-width: 480px) {
-  .logo {
-    height: 44px;
+  .title {
+    font-size: 1.5rem;
   }
 
   .btn {

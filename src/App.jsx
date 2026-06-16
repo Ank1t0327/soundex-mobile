@@ -233,7 +233,7 @@ function App() {
     <div className="app">
       <div className="app-container">
         <div className="header">
-          <img src={`${process.env.PUBLIC_URL}/logo.png`} alt="Soundex" className="logo" />
+          <h1 className="title">S O U N D E X</h1>
         </div>
 
         <div className="content">
