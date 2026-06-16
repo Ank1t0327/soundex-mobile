@@ -42,51 +42,82 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_WATCHLIST, JSON.stringify(watchlist));
-  }, [watchlist]);
-
-  // Loading animation
-  useEffect(() => {
-    let animationInterval;
-    if (isLoading) {
-      animationInterval = setInterval(() => {
-        setSpinnerIdx(prev => (prev + 1) % spinnerChars.length);
-      }, 100);
-    }
-    return () => clearInterval(animationInterval);
-  }, [isLoading, spinnerChars.length]);
-
-  const updateStatus = (text, color = '#888888') => {
-    setStatus(text);
-    setStatusColor(color);
-  };
-
-  const handleInstallPrompt = async () => {
-    if (!installPromptEvent) {
-      return;
-    }
-
     try {
-      await installPromptEvent.prompt();
-      const choice = await installPromptEvent.userChoice;
+      const queryClean = searchQuery
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_|_$/g, '');
 
-      if (choice.outcome === 'accepted') {
-        updateStatus('App installed! Thank you.', '#2ecc71');
-      } else {
-        updateStatus('Install dismissed.', '#e67e22');
+      if (!queryClean) {
+        setIsLoading(false);
+        return;
       }
-    } catch (installError) {
-      console.error('Install prompt failed:', installError);
-      updateStatus('Install prompt unavailable.', '#e74c3c');
-    } finally {
-      setInstallPromptEvent(null);
-      setIsInstallBannerVisible(false);
-    }
-  };
 
-  useEffect(() => {
-    const beforeInstallPrompt = (event) => {
-      event.preventDefault();
-      setInstallPromptEvent(event);
+      const firstChar = queryClean[0];
+      const url = `https://v2.sg.media-imdb.com/suggestion/${encodeURIComponent(firstChar)}/${encodeURIComponent(queryClean)}.json`;
+
+      // Try direct request first. If it fails (CORS or network), try a list of public CORS proxies.
+      let response = null;
+      try {
+        response = await axios.get(url, { timeout: 8000 });
+      } catch (primaryErr) {
+        console.warn('Direct IMDb request failed, attempting proxies:', primaryErr?.message || primaryErr);
+
+        const proxyBuilders = [
+          (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+          (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+        ];
+
+        for (const build of proxyBuilders) {
+          const proxyUrl = build(url);
+          try {
+            response = await axios.get(proxyUrl, { timeout: 9000 });
+            // allorigins.raw returns the raw JSON body; codetabs also returns the proxied body.
+            break;
+          } catch (proxyErr) {
+            console.warn('Proxy failed:', proxyUrl, proxyErr?.message || proxyErr);
+            response = null;
+          }
+        }
+      }
+
+      if (!response || !response.data) {
+        throw new Error('No response from IMDb or proxies');
+      }
+
+      const results = [];
+      const data = response.data;
+      // If a proxy wrapped the response (some proxies return an object), try to unwrap
+      const payload = data.d ? data : (data.contents ? JSON.parse(data.contents || '{}') : data);
+
+      if (payload && payload.d) {
+        payload.d.forEach(item => {
+          if (item.id && item.id.startsWith('tt')) {
+            results.push({
+              id: item.id,
+              t: item.l || 'Unknown',
+              y: String(item.y || ''),
+              s: item.s || '',
+              type: item.qid || 'movie',
+              img: item.i?.imageUrl || ''
+            });
+          }
+        });
+      }
+
+      setSuggestions(results);
+      if (results.length > 0) {
+        updateStatus('Matches found.', '#666666');
+      } else {
+        updateStatus('No matches found.', '#e74c3c');
+      }
+    } catch (error) {
+      console.error('Error fetching suggestions:', error);
+      setSuggestions([]);
+      updateStatus('Error searching. Try again.', '#e74c3c');
+    } finally {
+      setIsLoading(false);
+    }
       setIsInstallBannerVisible(true);
     };
 
@@ -192,6 +223,12 @@ function App() {
 
   const playMovie = () => {
     if (!currentSelection) return;
+
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {
+        // Orientation lock may fail on some devices/browsers.
+      });
+    }
 
     let url = `https://www.playimdb.com/title/${currentSelection.id}/`;
     
