@@ -6,6 +6,7 @@ import SuggestionsList from './components/SuggestionsList';
 import Preview from './components/Preview';
 import BottomNav from './components/BottomNav';
 import Modal from './components/Modal';
+import Player from './components/Player';
 
 function App() {
   const [query, setQuery] = useState('');
@@ -19,105 +20,72 @@ function App() {
   const [showModal, setShowModal] = useState(null);
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
   const [isInstallBannerVisible, setIsInstallBannerVisible] = useState(false);
+  const [playerUrl, setPlayerUrl] = useState(null);
   const [spinnerIdx, setSpinnerIdx] = useState(0);
   const debounceTimer = useRef(null);
-  const spinnerChars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  const spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
   const STORAGE_KEY_HISTORY = 'soundex_history';
   const STORAGE_KEY_WATCHLIST = 'soundex_watchlist';
 
-  // Load data from localStorage
   useEffect(() => {
     const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
     const savedWatchlist = localStorage.getItem(STORAGE_KEY_WATCHLIST);
-    
+
     if (savedHistory) setHistory(JSON.parse(savedHistory));
     if (savedWatchlist) setWatchlist(JSON.parse(savedWatchlist));
   }, []);
 
-  // Save data to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
   }, [history]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_WATCHLIST, JSON.stringify(watchlist));
-    try {
-      const queryClean = searchQuery
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_|_$/g, '');
+  }, [watchlist]);
 
-      if (!queryClean) {
-        setIsLoading(false);
-        return;
-      }
-
-      const firstChar = queryClean[0];
-      const url = `https://v2.sg.media-imdb.com/suggestion/${encodeURIComponent(firstChar)}/${encodeURIComponent(queryClean)}.json`;
-
-      // Try direct request first. If it fails (CORS or network), try a list of public CORS proxies.
-      let response = null;
-      try {
-        response = await axios.get(url, { timeout: 8000 });
-      } catch (primaryErr) {
-        console.warn('Direct IMDb request failed, attempting proxies:', primaryErr?.message || primaryErr);
-
-        const proxyBuilders = [
-          (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-          (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-        ];
-
-        for (const build of proxyBuilders) {
-          const proxyUrl = build(url);
-          try {
-            response = await axios.get(proxyUrl, { timeout: 9000 });
-            // allorigins.raw returns the raw JSON body; codetabs also returns the proxied body.
-            break;
-          } catch (proxyErr) {
-            console.warn('Proxy failed:', proxyUrl, proxyErr?.message || proxyErr);
-            response = null;
-          }
-        }
-      }
-
-      if (!response || !response.data) {
-        throw new Error('No response from IMDb or proxies');
-      }
-
-      const results = [];
-      const data = response.data;
-      // If a proxy wrapped the response (some proxies return an object), try to unwrap
-      const payload = data.d ? data : (data.contents ? JSON.parse(data.contents || '{}') : data);
-
-      if (payload && payload.d) {
-        payload.d.forEach(item => {
-          if (item.id && item.id.startsWith('tt')) {
-            results.push({
-              id: item.id,
-              t: item.l || 'Unknown',
-              y: String(item.y || ''),
-              s: item.s || '',
-              type: item.qid || 'movie',
-              img: item.i?.imageUrl || ''
-            });
-          }
-        });
-      }
-
-      setSuggestions(results);
-      if (results.length > 0) {
-        updateStatus('Matches found.', '#666666');
-      } else {
-        updateStatus('No matches found.', '#e74c3c');
-      }
-    } catch (error) {
-      console.error('Error fetching suggestions:', error);
-      setSuggestions([]);
-      updateStatus('Error searching. Try again.', '#e74c3c');
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    let animationInterval;
+    if (isLoading) {
+      animationInterval = setInterval(() => {
+        setSpinnerIdx(prev => (prev + 1) % spinnerChars.length);
+      }, 100);
     }
+    return () => clearInterval(animationInterval);
+  }, [isLoading, spinnerChars.length]);
+
+  const updateStatus = (text, color = '#888888') => {
+    setStatus(text);
+    setStatusColor(color);
+  };
+
+  const handleInstallPrompt = async () => {
+    if (!installPromptEvent) {
+      return;
+    }
+
+    try {
+      await installPromptEvent.prompt();
+      const choice = await installPromptEvent.userChoice;
+
+      if (choice.outcome === 'accepted') {
+        updateStatus('App installed! Thank you.', '#2ecc71');
+      } else {
+        updateStatus('Install dismissed.', '#e67e22');
+      }
+    } catch (installError) {
+      console.error('Install prompt failed:', installError);
+      updateStatus('Install prompt unavailable.', '#e74c3c');
+    } finally {
+      setInstallPromptEvent(null);
+      setIsInstallBannerVisible(false);
+    }
+  };
+
+  useEffect(() => {
+    const beforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event);
       setIsInstallBannerVisible(true);
     };
 
@@ -157,6 +125,67 @@ function App() {
     };
   }, []);
 
+  const parseImdbResults = (data) => {
+    const payload = data?.d
+      ? data
+      : (data?.contents ? JSON.parse(data.contents || '{}') : data);
+
+    const results = [];
+    if (payload?.d) {
+      payload.d.forEach(item => {
+        if (item.id && item.id.startsWith('tt')) {
+          results.push({
+            id: item.id,
+            t: item.l || 'Unknown',
+            y: String(item.y || ''),
+            s: item.s || '',
+            type: item.qid || 'movie',
+            img: item.i?.imageUrl || ''
+          });
+        }
+      });
+    }
+    return results;
+  };
+
+  const fetchImdbSuggestions = async (searchQuery) => {
+    const queryClean = searchQuery
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '');
+
+    if (!queryClean) {
+      return [];
+    }
+
+    const firstChar = queryClean[0];
+    const url = `https://v2.sg.media-imdb.com/suggestion/${encodeURIComponent(firstChar)}/${encodeURIComponent(queryClean)}.json`;
+
+    try {
+      const response = await axios.get(url, { timeout: 8000 });
+      return parseImdbResults(response.data);
+    } catch (primaryErr) {
+      console.warn('Direct IMDb request failed, attempting proxies:', primaryErr?.message || primaryErr);
+
+      const proxyBuilders = [
+        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+        (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+      ];
+
+      for (const build of proxyBuilders) {
+        const proxyUrl = build(url);
+        try {
+          const response = await axios.get(proxyUrl, { timeout: 9000 });
+          return parseImdbResults(response.data);
+        } catch (proxyErr) {
+          console.warn('Proxy failed:', proxyUrl, proxyErr?.message || proxyErr);
+        }
+      }
+
+      throw primaryErr;
+    }
+  };
+
   const fetchSuggestions = async (searchQuery) => {
     if (!searchQuery || searchQuery.trim().length < 2) {
       setSuggestions([]);
@@ -170,37 +199,9 @@ function App() {
     updateStatus(`Searching ${spinnerChars[spinnerIdx]}`, '#4a90e2');
 
     try {
-      const queryClean = searchQuery
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_|_$/g, '');
-
-      if (!queryClean) {
-        setIsLoading(false);
-        return;
-      }
-
-      const firstChar = queryClean[0];
-      const url = `https://v2.sg.media-imdb.com/suggestion/${encodeURIComponent(firstChar)}/${encodeURIComponent(queryClean)}.json`;
-      const response = await axios.get(url);
-
-      const results = [];
-      if (response.data.d) {
-        response.data.d.forEach(item => {
-          if (item.id && item.id.startsWith('tt')) {
-            results.push({
-              id: item.id,
-              t: item.l || 'Unknown',
-              y: String(item.y || ''),
-              s: item.s || '',
-              type: item.qid || 'movie',
-              img: item.i?.imageUrl || ''
-            });
-          }
-        });
-      }
-
+      const results = await fetchImdbSuggestions(searchQuery);
       setSuggestions(results);
+
       if (results.length > 0) {
         updateStatus('Matches found.', '#666666');
       } else {
@@ -215,45 +216,40 @@ function App() {
     }
   };
 
+  const buildPlayUrl = (item, season = '1', episode = '1') => {
+    let url = `https://playimdb.com/title/${item.id}/`;
+    if (item.type === 'tvSeries') {
+      url += `${season}/${episode}/`;
+    }
+    return url;
+  };
+
   const handleSuggestionSelect = (item) => {
     setCurrentSelection(item);
     setQuery(item.t);
     setSuggestions([]);
   };
 
-  const playMovie = () => {
+  const playMovie = ({ season = '1', episode = '1' } = {}) => {
     if (!currentSelection) return;
 
-    if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').catch(() => {
-        // Orientation lock may fail on some devices/browsers.
-      });
-    }
+    const url = buildPlayUrl(currentSelection, season, episode);
 
-    let url = `https://www.playimdb.com/title/${currentSelection.id}/`;
-    
-    if (currentSelection.type === 'tvSeries') {
-      const season = document.querySelector('[data-season]')?.getAttribute('data-season') || '1';
-      const episode = document.querySelector('[data-episode]')?.getAttribute('data-episode') || '1';
-      url += `${season}/${episode}/`;
-    }
-
-    // Update history
     setHistory(prev => {
       const filtered = prev.filter(x => x.id !== currentSelection.id);
       return [currentSelection, ...filtered].slice(0, 20);
     });
 
     updateStatus('Opening stream...', '#2ecc71');
-    window.open(url, '_blank');
+    setPlayerUrl(url);
   };
 
   const playTrailer = () => {
     if (!currentSelection) return;
 
-    const query = `${currentSelection.t} ${currentSelection.y} official trailer`;
-    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-    window.open(url, '_blank');
+    const trailerQuery = `${currentSelection.t} ${currentSelection.y} official trailer`;
+    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(trailerQuery)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const addToWatchlist = () => {
@@ -289,6 +285,11 @@ function App() {
     setShowModal(null);
   };
 
+  const closePlayer = () => {
+    setPlayerUrl(null);
+    updateStatus('Ready.', '#666666');
+  };
+
   return (
     <div className="app">
       <div className="app-container">
@@ -297,7 +298,7 @@ function App() {
         </div>
 
         <div className="content">
-          <SearchBar 
+          <SearchBar
             value={query}
             onChange={handleQueryChange}
           />
@@ -314,7 +315,7 @@ function App() {
           )}
 
           {suggestions.length > 0 && (
-            <SuggestionsList 
+            <SuggestionsList
               suggestions={suggestions}
               onSelect={handleSuggestionSelect}
             />
@@ -351,6 +352,14 @@ function App() {
           onSelect={loadFromList}
           onRemove={removeItem}
           onClearHistory={showModal === 'history' ? clearAllHistory : null}
+        />
+      )}
+
+      {playerUrl && currentSelection && (
+        <Player
+          url={playerUrl}
+          title={currentSelection.t}
+          onClose={closePlayer}
         />
       )}
     </div>

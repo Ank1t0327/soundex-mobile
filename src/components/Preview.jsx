@@ -40,7 +40,7 @@ function Preview({ item, onPlay, onTrailer, onAddWatchlist }) {
       )}
 
       <div className="preview-buttons">
-        <button className="btn btn-play" onClick={onPlay}>
+        <button className="btn btn-play" onClick={() => onPlay({ season, episode })}>
           ▶ PLAY
         </button>
         <button className="btn btn-trailer" onClick={onTrailer}>
