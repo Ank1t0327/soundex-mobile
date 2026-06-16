@@ -1,6 +1,6 @@
 import React from 'react';
 
-function SearchBar({ value, onChange, onKeyRelease }) {
+function SearchBar({ value, onChange }) {
   return (
     <div className="search-bar">
       <input
@@ -9,7 +9,6 @@ function SearchBar({ value, onChange, onKeyRelease }) {
         placeholder="Search movies and TV shows..."
         value={value}
         onChange={onChange}
-        onKeyUp={onKeyRelease}
         autoFocus
       />
     </div>

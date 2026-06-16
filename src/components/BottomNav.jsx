@@ -1,6 +1,6 @@
 import React from 'react';
 
-function BottomNav({ onHistoryClick, onWatchlistClick }) {
+function BottomNav({ onHistoryClick, onWatchlistClick, onInstallClick }) {
   return (
     <div className="bottom-nav">
       <button className="nav-btn" onClick={onWatchlistClick}>
@@ -9,6 +9,11 @@ function BottomNav({ onHistoryClick, onWatchlistClick }) {
       <button className="nav-btn" onClick={onHistoryClick}>
         🕒 HISTORY
       </button>
+      {onInstallClick && (
+        <button className="nav-btn nav-btn-install" onClick={onInstallClick}>
+          ⬇ INSTALL
+        </button>
+      )}
     </div>
   );
 }

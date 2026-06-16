@@ -105,31 +105,26 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!installPromptEvent) {
-      return;
-    }
-
-    const installTimer = setTimeout(() => {
-      handleInstallPrompt();
-    }, 800);
-
-    return () => clearTimeout(installTimer);
-  }, [installPromptEvent]);
-
-  const handleKeyRelease = (e) => {
-    if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) {
-      return;
-    }
+  const handleQueryChange = (e) => {
+    const value = e.target.value;
+    setQuery(value);
 
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
     }
 
     debounceTimer.current = setTimeout(() => {
-      fetchSuggestions(e.target.value);
+      fetchSuggestions(value);
     }, 300);
   };
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
 
   const fetchSuggestions = async (searchQuery) => {
     if (!searchQuery || searchQuery.trim().length < 2) {
@@ -267,8 +262,7 @@ function App() {
         <div className="content">
           <SearchBar 
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyRelease={handleKeyRelease}
+            onChange={handleQueryChange}
           />
 
           {isInstallBannerVisible && (
@@ -308,6 +302,7 @@ function App() {
       <BottomNav
         onHistoryClick={() => setShowModal('history')}
         onWatchlistClick={() => setShowModal('watchlist')}
+        onInstallClick={installPromptEvent ? handleInstallPrompt : undefined}
       />
 
       {showModal && (
