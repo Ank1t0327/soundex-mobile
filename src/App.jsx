@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
 import './App.css';
 import SearchBar from './components/SearchBar';
 import SuggestionsList from './components/SuggestionsList';
@@ -7,6 +6,7 @@ import Preview from './components/Preview';
 import BottomNav from './components/BottomNav';
 import Modal from './components/Modal';
 import Player from './components/Player';
+import { fetchImdbSuggestions } from './utils/imdbSearch';
 
 function App() {
   const [query, setQuery] = useState('');
@@ -124,67 +124,6 @@ function App() {
       }
     };
   }, []);
-
-  const parseImdbResults = (data) => {
-    const payload = data?.d
-      ? data
-      : (data?.contents ? JSON.parse(data.contents || '{}') : data);
-
-    const results = [];
-    if (payload?.d) {
-      payload.d.forEach(item => {
-        if (item.id && item.id.startsWith('tt')) {
-          results.push({
-            id: item.id,
-            t: item.l || 'Unknown',
-            y: String(item.y || ''),
-            s: item.s || '',
-            type: item.qid || 'movie',
-            img: item.i?.imageUrl || ''
-          });
-        }
-      });
-    }
-    return results;
-  };
-
-  const fetchImdbSuggestions = async (searchQuery) => {
-    const queryClean = searchQuery
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, '');
-
-    if (!queryClean) {
-      return [];
-    }
-
-    const firstChar = queryClean[0];
-    const url = `https://v2.sg.media-imdb.com/suggestion/${encodeURIComponent(firstChar)}/${encodeURIComponent(queryClean)}.json`;
-
-    try {
-      const response = await axios.get(url, { timeout: 8000 });
-      return parseImdbResults(response.data);
-    } catch (primaryErr) {
-      console.warn('Direct IMDb request failed, attempting proxies:', primaryErr?.message || primaryErr);
-
-      const proxyBuilders = [
-        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-        (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-      ];
-
-      for (const build of proxyBuilders) {
-        const proxyUrl = build(url);
-        try {
-          const response = await axios.get(proxyUrl, { timeout: 9000 });
-          return parseImdbResults(response.data);
-        } catch (proxyErr) {
-          console.warn('Proxy failed:', proxyUrl, proxyErr?.message || proxyErr);
-        }
-      }
-
-      throw primaryErr;
-    }
-  };
 
   const fetchSuggestions = async (searchQuery) => {
     if (!searchQuery || searchQuery.trim().length < 2) {
