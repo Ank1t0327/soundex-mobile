@@ -407,6 +407,38 @@ body {
   }
 }
 
+.install-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #1f2a3a;
+  border: 1px solid #33445a;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.install-banner-copy {
+  flex: 1;
+  font-size: 0.9rem;
+  color: #dfe7f3;
+}
+
+.btn-install {
+  background: #4a90e2;
+  color: #121212;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btn-install:active {
+  background: #357abd;
+}
+
 /* Prevent zoom on iOS */
 input,
 button,

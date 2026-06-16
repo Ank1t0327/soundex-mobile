@@ -17,6 +17,8 @@ function App() {
   const [history, setHistory] = useState([]);
   const [watchlist, setWatchlist] = useState([]);
   const [showModal, setShowModal] = useState(null);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [isInstallBannerVisible, setIsInstallBannerVisible] = useState(false);
   const [spinnerIdx, setSpinnerIdx] = useState(0);
   const debounceTimer = useRef(null);
   const spinnerChars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -58,6 +60,63 @@ function App() {
     setStatusColor(color);
   };
 
+  const handleInstallPrompt = async () => {
+    if (!installPromptEvent) {
+      return;
+    }
+
+    try {
+      await installPromptEvent.prompt();
+      const choice = await installPromptEvent.userChoice;
+
+      if (choice.outcome === 'accepted') {
+        updateStatus('App installed! Thank you.', '#2ecc71');
+      } else {
+        updateStatus('Install dismissed.', '#e67e22');
+      }
+    } catch (installError) {
+      console.error('Install prompt failed:', installError);
+      updateStatus('Install prompt unavailable.', '#e74c3c');
+    } finally {
+      setInstallPromptEvent(null);
+      setIsInstallBannerVisible(false);
+    }
+  };
+
+  useEffect(() => {
+    const beforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+      setIsInstallBannerVisible(true);
+    };
+
+    const appInstalled = () => {
+      updateStatus('PWA installed!', '#2ecc71');
+      setInstallPromptEvent(null);
+      setIsInstallBannerVisible(false);
+    };
+
+    window.addEventListener('beforeinstallprompt', beforeInstallPrompt);
+    window.addEventListener('appinstalled', appInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', beforeInstallPrompt);
+      window.removeEventListener('appinstalled', appInstalled);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!installPromptEvent) {
+      return;
+    }
+
+    const installTimer = setTimeout(() => {
+      handleInstallPrompt();
+    }, 800);
+
+    return () => clearTimeout(installTimer);
+  }, [installPromptEvent]);
+
   const handleKeyRelease = (e) => {
     if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) {
       return;
@@ -87,8 +146,7 @@ function App() {
     try {
       const queryClean = searchQuery
         .toLowerCase()
-        .replace(/[^a-z0-9]/g, '_')
-        .replace(/_+/g, '_')
+        .replace(/[^a-z0-9]+/g, '_')
         .replace(/^_|_$/g, '');
 
       if (!queryClean) {
@@ -97,11 +155,8 @@ function App() {
       }
 
       const firstChar = queryClean[0];
-      const url = `https://v2.sg.media-imdb.com/suggestion/${firstChar}/${encodeURIComponent(queryClean)}.json`;
-
-      const response = await axios.get(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
-      });
+      const url = `https://v2.sg.media-imdb.com/suggestion/${encodeURIComponent(firstChar)}/${encodeURIComponent(queryClean)}.json`;
+      const response = await axios.get(url);
 
       const results = [];
       if (response.data.d) {
@@ -215,6 +270,17 @@ function App() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyRelease={handleKeyRelease}
           />
+
+          {isInstallBannerVisible && (
+            <div className="install-banner">
+              <div className="install-banner-copy">
+                Install Soundex for faster access and offline support.
+              </div>
+              <button className="btn btn-install" onClick={handleInstallPrompt}>
+                INSTALL
+              </button>
+            </div>
+          )}
 
           {suggestions.length > 0 && (
             <SuggestionsList 
