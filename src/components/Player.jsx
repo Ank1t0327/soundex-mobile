@@ -1,7 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 function Player({ url, title, onClose }) {
   const containerRef = useRef(null);
+  const loadTimeoutRef = useRef(null);
+  const [showFallback, setShowFallback] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -38,8 +40,42 @@ function Player({ url, title, onClose }) {
       if (exitFullscreen && (document.fullscreenElement || document.webkitFullscreenElement)) {
         exitFullscreen.call(document).catch(() => {});
       }
+
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    setShowFallback(false);
+
+    loadTimeoutRef.current = setTimeout(() => {
+      setShowFallback(true);
+    }, 8000);
+
+    return () => {
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+    };
+  }, [url]);
+
+  const handleIframeLoad = () => {
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+    setShowFallback(false);
+  };
+
+  const handleIframeError = () => {
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+    setShowFallback(true);
+  };
 
   const handleClose = () => {
     onClose();
@@ -51,12 +87,9 @@ function Player({ url, title, onClose }) {
 
   return (
     <div className="player-overlay" ref={containerRef}>
-      <div className="player-toolbar">
-        <span className="player-title">{title}</span>
-        <button type="button" className="player-close" onClick={handleClose} aria-label="Close player">
-          ✕
-        </button>
-      </div>
+      <button type="button" className="player-close" onClick={handleClose} aria-label="Close player">
+        ✕
+      </button>
       <iframe
         className="player-frame"
         src={url}
@@ -64,10 +97,14 @@ function Player({ url, title, onClose }) {
         allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
         allowFullScreen
         referrerPolicy="origin"
+        onLoad={handleIframeLoad}
+        onError={handleIframeError}
       />
-      <button type="button" className="player-fallback" onClick={handleOpenSameTab}>
-        Player not loading? Tap to open
-      </button>
+      {showFallback && (
+        <button type="button" className="player-fallback" onClick={handleOpenSameTab}>
+          Player not loading? Tap to open
+        </button>
+      )}
     </div>
   );
 }
